@@ -151,17 +151,27 @@ func (a *ConversationalAgent) parseOutput(output string) ([]schema.AgentAction, 
 		return nil, finishAction, nil
 	}
 
-	r := regexp.MustCompile(`Action: (.*?)[\n]*(?s)Action Input: (.*)`)
-	matches := r.FindStringSubmatch(output)
-	if len(matches) == 0 {
-		return nil, nil, fmt.Errorf("%w: %s", ErrUnableToParseOutput, output)
+	agentActions := make([]schema.AgentAction, 0)
+	outputs := strings.Split(output, "\n\n")
+	for i := range outputs {
+		if strings.TrimSpace(outputs[i]) == "" {
+			continue
+		}
+		r := regexp.MustCompile(`Action: (.*?)[\n]*(?s)Action Input: (.*)`)
+		matches := r.FindStringSubmatch(outputs[i])
+		if len(matches) == 0 {
+			return nil, nil, fmt.Errorf("%w: %s", ErrUnableToParseOutput, outputs[i])
+		}
+
+		toolInput := strings.TrimSuffix(matches[2], "\nObservation:")
+		toolInput = strings.TrimSuffix(toolInput, "\nObservation")
+		agentActions = append(agentActions, schema.AgentAction{
+			Tool:      strings.TrimSpace(matches[1]),
+			ToolInput: strings.TrimSpace(toolInput),
+			Log:       outputs[i]})
 	}
 
-	toolInput := strings.TrimSuffix(matches[2], "\nObservation:")
-	toolInput = strings.TrimSuffix(toolInput, "\nObservation")
-	return []schema.AgentAction{
-		{Tool: strings.TrimSpace(matches[1]), ToolInput: strings.TrimSpace(toolInput), Log: output},
-	}, nil, nil
+	return agentActions, nil, nil
 }
 
 //go:embed prompts/conversational_prefix.txt
